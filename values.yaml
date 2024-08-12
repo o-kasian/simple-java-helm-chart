@@ -1,0 +1,16 @@
+namespace: default
+name: appName
+version: 1.0.0
+labels: {}
+tolerations: {}
+deployment:
+  minReadySeconds: 5
+  replicaCount: 2
+  revisionHistoryLimit: 2
+service:
+  annotations: {}
+  expose: true
+image:
+  name: imageName
+  tag: "tag"
+  pullPolicy: IfNotPresent

@@ -1,0 +1,27 @@
+{{- with .Values.service }}
+---
+apiVersion: v1
+kind: List
+items:
+- apiVersion: v1
+  kind: Service
+  metadata:
+{{- if .annotations }}
+    annotations:
+{{ toYaml .annotations | indent 6 }}
+{{- end }}
+    labels:
+      expose: {{ .expose | quote }}
+{{ include "labels.chart" $ | indent 6 }}
+    name: {{ $.Values.name }}
+  spec:
+    ports:
+    {{- range .ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      protocol: {{ .protocol }}
+      targetPort: {{ .targetPort }}
+    {{- end }}
+    selector:
+{{ include "labels.selector" $ | indent 6 }}
+{{- end }}

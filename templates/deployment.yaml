@@ -1,0 +1,200 @@
+---
+apiVersion: v1
+kind: List
+items:
+- apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    labels:
+{{ include "labels.chart" . | indent 6 }}
+    name: {{ .Values.name }}
+  spec:
+  {{- with .Values.deployment.minReadySeconds }}
+    minReadySeconds: {{ . }}
+  {{- end }}
+    replicas: {{ .Values.deployment.replicaCount }}
+    revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+    selector:
+      matchLabels:
+{{ include "labels.selector" . | indent 8 }}
+{{- with .Values.rollingUpdateStrategy }}
+{{ toYaml . | indent 4 -}}
+{{- end }}
+    template:
+      metadata:
+        labels:
+{{ include "labels.selector" . | indent 10 }}
+        {{- if .Values.deployment.podAnnotations }}
+        annotations:
+        {{- else if .Values.config }}
+          {{- if .Values.config.fluentd }}
+        annotations:
+          {{- end }}
+        {{- end }}
+        {{- with .Values.deployment.podAnnotations }}
+        {{- range . }}
+          {{ .key }}: {{ .value | quote }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.config }}
+        {{- with .fluentd }}
+          fluentdConfiguration: >
+            [
+              {
+                "containers":
+                [
+                  {
+                    "expressionFirstLine": "{{ .regexFirstLine }}",
+                    "expression": "{{ .regex }}",
+                    "timeFormat": "{{ .timeFormat }}",
+                    "containerName": "spring-boot"
+                  }
+                ]{{- with .notifications }},
+                "notifications": {
+                  {{- with .slack }}
+                  "slack": {
+                    "webhookURL": "{{ .webhookURL }}",
+                    "channelName": "{{ .channelName }}"
+                  }
+                  {{- end }}
+                }
+                {{- end }}
+              }
+            ]
+          {{- end }}
+          {{- end }}
+      spec:
+        {{- if .Values.tolerations }}
+        tolerations:
+{{ toYaml .Values.tolerations | indent 10 -}}
+        {{- end }}
+        containers:
+        - env:
+          - name: KUBERNETES_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          {{- with .Values.env }}
+            {{- range . }}
+          - name: {{ .name }}
+            value: "{{ .value }}"
+            {{- end }}
+          {{- end }}
+          image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.deployment.probes }}
+          {{- with .liveness }}
+          livenessProbe:
+            {{- with .failureThreshold }}
+            failureThreshold: {{ . }}
+            {{- end }}
+            httpGet:
+              path: {{ .path }}
+              port: {{ .port }}
+              scheme: {{ .scheme }}
+            {{- with .periodSeconds }}
+            periodSeconds: {{ . }}
+            {{- end }}
+            {{- with .successThreshold }}
+            successThreshold: {{ . }}
+            {{- end }}
+            {{- with .timeoutSeconds }}
+            timeoutSeconds: {{ . }}
+            {{- end }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+          {{- end }}
+          {{- end }}
+          name: spring-boot
+          {{- with .Values.ports }}
+          ports:
+            {{- range . }}
+          - containerPort: {{ .containerPort }}
+            name: {{ .name }}
+            protocol: {{ .protocol }}
+            {{- end }}
+          {{- end }}
+          {{- with .Values.deployment.probes }}
+          {{- with .readiness }}
+          readinessProbe:
+            {{- with .failureThreshold }}
+            failureThreshold: {{ . }}
+            {{- end }}
+            httpGet:
+              path: {{ .path }}
+              port: {{ .port }}
+              scheme: {{ .scheme }}
+            {{- with .periodSeconds }}
+            periodSeconds: {{ . }}
+            {{- end }}
+            {{- with .successThreshold }}
+            successThreshold: {{ . }}
+            {{- end }}
+            {{- with .timeoutSeconds}}
+            timeoutSeconds: {{ . }}
+            {{- end }}
+            initialDelaySeconds: {{ .initialDelaySeconds }}
+          {{- end }}
+          {{- end }}
+          securityContext:
+            privileged: false
+          {{- with .Values.deployment.resources }}
+          resources:
+            {{- with .limits }}
+            limits:
+              {{- with .memory }}
+              memory: "{{ . }}"
+              {{- end }}
+              {{- with .cpu }}
+              cpu: "{{ . }}"
+              {{- end }}
+            {{- end }}
+            {{- with .requests }}
+            requests:
+              {{- with .memory }}
+              memory: "{{ . }}"
+              {{- end }}
+              {{- with .cpu }}
+              cpu: "{{ . }}"
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- with .Values.mounts }}
+          volumeMounts:
+            {{- with .secrets }}
+              {{- range . }}
+          - mountPath: {{ .mountPath }}
+            name: {{ .mountName }}
+            {{- with .readOnly }}
+            readOnly: {{ . }}
+            {{- end }}
+              {{- end }}
+            {{- end }}
+          {{- with .hostPaths }}
+              {{- range . }}
+          - mountPath: {{ .mountPath }}
+            name: {{ .mountName }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+        {{- with .Values.imagePullSecrets }}
+        imagePullSecrets:
+          {{- range . }}
+        - name: {{ . }}
+          {{- end }}
+        {{- end }}
+        {{- with .Values.serviceAccount }}
+        serviceAccount: {{ . }}
+        {{- end }}
+        {{- with .Values.mounts }}
+        volumes:
+          {{- range .secrets }}
+        - name: {{ .mountName }}
+          secret:
+            secretName: {{ .secretName }}
+          {{- end }}
+          {{- range .hostPaths }}
+        - name: {{ .mountName }}
+          hostPath:
+            path: {{ .hostPath }}
+          {{- end }}
+        {{- end }}
